@@ -13,7 +13,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.kkd.support.PostgresTestSupport;
 
-@SpringBootTest
+@SpringBootTest(properties = {"kkd.demo.enabled=false", "kkd.run.enabled=false"})
 @Testcontainers
 class KkdApplicationTest {
 

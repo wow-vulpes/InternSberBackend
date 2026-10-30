@@ -15,3 +15,9 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+
+kkd:
+  demo:
+    enabled: ${KKD_DEMO_ENABLED:false}
+  run:
+    enabled: ${KKD_RUN_ENABLED:false}
