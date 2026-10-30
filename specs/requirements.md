@@ -38,6 +38,10 @@ Backend на Java, PostgreSQL, REST API, миграции, демонстрац�
 - BR-09: идентичность проблемы — (rule_code, object_type, object_id). Сравниваем с предыдущим успешно завершённым прогоном. Первый прогон: compared_to, previous, delta и счётчики new/persisting/resolved равны null.
 - BR-10: фильтр подразделения использует иерархию соответствующего снимка; исторические данные не пересчитываются по текущей структуре.
 - BR-11: каждый запуск создаёт новый прогон; завершённый прогон неизменяем. Частичные результаты не выдаются за завершённые.
+- BR-12 (дизайн шага 2): null вместо набора целей/даты снимка/элемента списка/списка КР, пустые обязательные ID, отсутствующий вес КР, повторные ID целей или КР — некорректный вход, отклоняемый через IllegalArgumentException без частичного результата. ID цели и КР могут совпадать между типами. Ответственный и дата обновления факта могут отсутствовать: это данные для правил, а не ошибка входного контракта.
+- BR-13 (дизайн шага 2): будущая дата обновления не считается устаревшей; диапазон отдельного веса не проверяется выбранными правилами, только сумма. Результат неизменяемый, порядок: goalId → ruleCode.name() → objectType.name() → objectId; повторный вызов с теми же данными даёт тот же результат.
+
+BR-12–13 согласованы при принятии дизайна шага 2. В C.1 реализована валидация BR-12 и неизменяемость моделей; в C.2 реализованы четыре правила и стабильный неизменяемый результат BR-13. Заглушка check удалена. Общая проверка D пройдена: полный verify, 100 сценариев без ошибок и пропусков. Шаг 2 принят пользователем; остальные требования проекта остаются в плане.
 
 ## Ещё предстоит детализировать
 
@@ -51,8 +55,15 @@ Backend на Java, PostgreSQL, REST API, миграции, демонстрац�
 
 | Требования | Сценарии | Тесты | Статус |
 | --- | --- | --- | --- |
-| REQ-09 (инфраструктура) | Загрузка Spring-контекста без БД и HTTP-сервера | KkdApplicationTest.contextLoads | C.1: 1 тест пройден; бизнес-критерии REQ-09 ещё не выполнены |
-| REQ-01, BR-01–05 | Границы четырёх правил и неактивные цели | Будут добавлены на шаге 2 | Не реализовано |
+| REQ-09 (инфраструктура) | Загрузка Spring-контекста без БД и HTTP-сервера | KkdApplicationTest.contextLoads | D шага 2: пройдено; тесты метрик и дельты ещё предстоят |
+| BR-01 | Отсутствующий/заполненный ответственный | DataQualityRulesTest.findsMissingOwner, acceptsPresentOwner | C.2: пройдено |
+| BR-02 | Пустые КР без дополнительной проблемы суммы | DataQualityRulesTest.findsMissingKeyResultsWithoutWeightIssue | C.2: пройдено |
+| BR-03 | Точная сумма 100, разный масштаб, дроби и отклонения без округления | DataQualityRulesTest.acceptsExactWeightSumRegardlessOfScale, findsIncorrectWeightSumWithoutRounding | C.2: пройдено |
+| BR-04 | 45/46 дней, null, границы месяца/года, високосный год, пределы дат | DataQualityRulesTest.checksProgressAgeAgainstSnapshot, findsProgressThatWasNeverUpdated, handlesMonthYearAndLeapYearBoundaries, handlesSupportedDateLimits | C.2: пройдено |
+| BR-05 | Исключение неактивных целей и их КР | DataQualityRulesTest.ignoresInactiveGoalsAndTheirKeyResults | C.2: пройдено |
+| REQ-01 | Все нарушения и связь проблемы с объектом, целью и подразделением | DataQualityRulesTest.returnsAllViolationsInStableOrder, findsEachStaleKeyResultAndKeepsGoalAndUnitLinks; IssueTest | Проверка D пройдена; шаг 2 принят пользователем |
+| BR-12, контракты моделей | Обязательные поля, дубли, отдельные пространства ID, неизменяемость моделей, сохранение данных для правил | GoalSnapshotTest, KeyResultSnapshotTest, IssueTest, DataQualityCheckerTest | C.1–C.2: пройдено |
+| BR-13 | Неизменяемость, порядок, повторяемость, дата каждого вызова и будущая дата | DataQualityRulesTest.returnsImmutableResultsIncludingEmptyResult, producesSameResultForDifferentInputOrderAndRepeatedCalls, usesDateOfEachCallWithoutKeepingPreviousResults, checksProgressAgeAgainstSnapshot | C.2: пройдено |
 | REQ-02, REQ-07 | Целостность, история, цикл миграций | Будут добавлены на шаге 3 | Не реализовано |
 | REQ-06, BR-11 | Два прогона, повторный старт | Будут добавлены на шаге 4 | Не реализовано |
 | REQ-03, BR-06–10 | Метрики, потомки, первый прогон, дельта | Будут добавлены на шаге 5 | Не реализовано |

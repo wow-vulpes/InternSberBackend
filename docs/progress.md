@@ -1,48 +1,60 @@
 # Текущее состояние
 
 - Дата: 30 октября 2026.
-- Шаг 1 принят пользователем целиком после успешной проверки D/E. Этап F: создание согласованного первого коммита разрешено.
-- Последнее явное разрешение: «Да» в ответ на вопрос «Принимаешь шаг 1 и разрешаешь создать этот коммит?» с сообщением chore: initialize backend project and specifications и точным составом из 16 файлов.
-- Frontend исключён пользователем. Бизнес-логика, БД, API и push в текущий проход не входят; шаг 2 не разрешён.
-- Созданы: backend, официальный Maven Wrapper 3.3.4 с Maven 3.9.11, конфигурация, AGENTS.md, specs/, docs/, README.
-- Проверки: Wrapper --version подтвердил Maven 3.9.11 и Java 21; compile завершился с кодом 0. Проверены XML POM, синтаксис shell-скрипта Wrapper и локальные ссылки документации. В production-исходниках только точка входа; бизнес-компонентов пока нет.
-- Команда компиляции: из backend/ `JAVA_HOME=/home/deonande/.sdkman/candidates/java/21-tem MAVEN_USER_HOME=/home/deonande/InternSber/.cache/maven ./mvnw -q -B -Dmaven.repo.local=/home/deonande/InternSber/.cache/m2 compile`. Пути относятся только к среде проверки и не зашиты в конфигурацию проекта. Кеш исключён через .gitignore.
-- Для скачивания Wrapper и зависимостей потребовалось разрешение сетевого доступа; после разрешения скачивание и компиляция успешны.
-- В C.1 добавлены KkdApplicationTest.contextLoads, Maven Enforcer 3.6.2 и Spotless 3.0.0 с Google Java Format 1.28.0 (AOSP). Обновлены POM, README, AGENTS.md и спецификация дизайна.
-- Проверки C.1: `./mvnw -q -B test` (с теми же JAVA_HOME и локальными путями кеша, что выше) — код 0; 1 тест, 0 ошибок, 0 сбоев, 0 пропусков. Контекст загружен без БД и HTTP-сервера.
-- Отрицательные проверки: offline validate на Java 18 остановлен Enforcer с подсказкой JAVA_HOME; offline validate с временно нарушенным форматом теста остановлен Spotless. Исходник восстановлен в finally; повторный offline validate на Java 21 успешен. Правила проверок не отключались.
-- На C.1 проверены итоговые POM и тест; изменения были ограничены C.1. На тот момент все файлы были untracked, индексация не выполнялась.
-- В C.2 уточнены README, спецификация дизайна, статусы и границы проверок: требования к JDK/Wrapper, различия команд Linux/Windows, переменная SERVER_PORT, отсутствие автозагрузки .env, готовые и будущие возможности.
-- Проверки C.2: локальные Markdown-ссылки, ID REQ-01–10 и BR-01–11, версии из POM/Wrapper и SERVER_PORT сверены с файлами. Отдельные команды spotless:check и spotless:apply выполнены offline с теми же JAVA_HOME и путями кеша: обе завершились с кодом 0. Хеши Java-исходников до/после совпадают. Код, POM и тесты в C.2 не менялись; ранее успешные тесты повторно не запускались.
-- Проверки D: verify на JDK 21 с Maven 3.9.11 — код 0; 1 тест, 0 ошибок/сбоев/пропусков. Создан исполняемый target/kkd-service-0.0.1-SNAPSHOT.jar; проверены Start-Class и наличие класса приложения в архиве.
-- Проверены отдельный запуск JAR без SERVER_PORT на порту 8080 и spring-boot:run с SERVER_PORT=8081. GET /api/runs возвращает 404 в обоих случаях (API ещё не реализован). Проверочные процессы остановлены.
-- Для verify потребовалось скачивание плагинов с разрешённым сетевым доступом; для HTTP-проверки — разрешение локальных сокетов. После разрешений обе проверки успешны. Логи и JAR находятся в игнорируемых .cache/ и backend/target/.
-- Обзор D/E: исходники, конфигурация и документация соответствуют шагу 1; бизнес-заглушек и лишних компонентов нет. Проверены исключения для target, .cache и .env, а .env.example доступен для коммита. Сторонних staged-изменений нет. REQ-09 и REQ-10 выполнены только в части каркаса; бизнес-функции, миграции и их инструкции ещё предстоят. Windows и чистое окружение не проверены.
-- Перед F: ветка main без коммитов; 16 согласованных файлов не отслеживаются, индекс пуст. Агент Git не инициализировал. Хеш и результат создания коммита проверяются по Git после выполнения, без изменения этого снимка документации.
-- Открыто: внешние условия ИФТ/корпоративной интеграции недоступны; детали дальнейших шагов требуют отдельного дизайна.
-- Следующий переход после успешного коммита: детальный дизайн шага 2 (четыре правила ККД), только по отдельному разрешению. Push не разрешён.
+- Шаг 1 завершён, проверен и принят. Коммит: 85b503b133489d450e0f228d7bc8deba0790c54d — chore: initialize backend project and specifications.
+- Шаг 2 реализован, прошёл D и принят пользователем; E выполнен, создание согласованного коммита F разрешено.
+- Последнее явное разрешение: «да» в ответ на вопрос «Разрешаешь создать этот коммит?» с сообщением feat: implement data quality rules and validation и точным составом из 18 файлов. Шаг 3 не разрешён.
+- Frontend исключён из объёма. Push не разрешён.
 
-## Согласованный коммит
+## Реализованное поведение и результат D
 
-Разрешённое сообщение: `chore: initialize backend project and specifications`.
+- DataQualityChecker.check после полной валидации входа выполняет GOAL_NO_OWNER, GOAL_NO_KR, KR_WEIGHTS_SUM и KR_STALE_PROGRESS только для активных целей и их КР.
+- Каждое правило выделено в private-метод; Spring, SQL и системных часов в компоненте нет. Коды, важность, ID объекта, цели и подразделения сохраняются в Issue.
+- Сумма весов сравнивается с 100 через BigDecimal.compareTo без округления. Цель без КР получает GOAL_NO_KR без KR_WEIGHTS_SUM.
+- Давность — более 45 календарных дней относительно даты снимка. null-дата означает нарушение, ровно 45 дней допустимо, будущая дата не устаревшая. ChronoUnit.DAYS.between избегает переполнения при вычитании дней из LocalDate.MIN.
+- Результат сортируется по goalId → ruleCode.name() → objectType.name() → objectId и возвращается через List.copyOf. Входные данные не изменяются, состояния между вызовами нет.
+- Заглушка check удалена. Три временных сценария недоступности заменены проверками конкретных проблем, включая пустой набор и одинаковые ID цели/КР.
+- Добавлен DataQualityRulesTest. README, specs/ и план отражают реализованную логику и фактические проверки. Зависимости, модели и Spring-конфигурация в C.2 не менялись.
 
-Состав — ровно 16 файлов:
+## Проверки
 
-- .env.example
-- .gitattributes
-- .gitignore
-- AGENTS.md
+- Полный verify на D выполнен успешно: 100 сценариев, 0 ошибок/сбоев/пропусков. GoalSnapshotTest — 16, KeyResultSnapshotTest — 11, IssueTest — 18, DataQualityCheckerTest — 12, DataQualityRulesTest — 42, KkdApplicationTest — 1. Проверки Java и формата также пройдены.
+- Покрыты отсутствие/наличие ответственного, пустые/непустые КР, точная сумма/масштаб/дроби/пограничные отклонения, 44/45/46 дней, null/будущие даты, месяц/год/високосный год и пределы LocalDate, неактивные цели, сочетания нарушений, связи объектов, порядок, повторные вызовы, неизменяемость и отсутствие изменения входа.
+- До D доменные тесты отдельно проходили в песочнице без Spring/БД/моков. На D полный verify запущен вне песочницы с разрешения пользователя, поскольку тесту контекста требуется подключение агента Mockito к JVM; код и проверки не отключались. Новых сетевых загрузок не было.
+- Команда D: из backend/ при JAVA_HOME=/home/deonande/.sdkman/candidates/java/21-tem и MAVEN_USER_HOME=/home/deonande/InternSber/.cache/maven — ./mvnw -o -q -B -Dmaven.repo.local=/home/deonande/InternSber/.cache/m2 verify. Пути кеша относятся только к среде проверки и исключены из Git.
+- Исполняемый backend/target/kkd-service-0.0.1-SNAPSHOT.jar собран; в архиве проверены Start-Class и наличие всех восьми доменных типов. Отдельный HTTP-запуск последний раз проверялся на шаге 1; новые доменные классы пока не подключены к API/Spring.
+- Выполнен обзор всех исходников и тестов шага 2, а также изменений README/specs/плана/прогресса, включая новые untracked-файлы. Ошибок, оставшихся заглушек, циклов зависимостей и изменений вне согласованного объёма не обнаружено. Новых зависимостей нет; POM и существующий код приложения не менялись. Исправления Java-кода на D не потребовались.
+- Документация обновлена по фактическому результату D; проверены локальные ссылки, соответствие требованиям, таблица покрытия и отсутствие лишних файлов сборки среди изменений. Индексация и коммит не выполнялись.
+
+## Ограничения и следующий переход
+
+- PostgreSQL, миграции, демоданные, метрики/дельта и бизнес-API ещё не реализованы. Windows, чистое окружение и ИФТ не проверены.
+- REQ-01 и BR-01–05/12–13 реализованы, прошли D и приняты в составе шага 2. REQ-09 пока выполнен частично: тесты метрик и дельты относятся к шагу 5.
+- Следующее разрешение после успешного F: детальный дизайн шага 3 — PostgreSQL, снимки, иерархия и обратимые миграции. До отдельного разрешения шаг 3 и push не начинать. Результат и хеш F проверяются по Git после выполнения, без изменения этого снимка документации.
+
+## Согласованный коммит шага 2
+
+Сообщение: `feat: implement data quality rules and validation`.
+
+Состав: 18 файлов — 8 новых production-файлов домена, 5 новых тестовых классов и 5 изменённых документов.
+
+- backend/src/main/java/ru/kkd/domain/model/GoalSnapshot.java
+- backend/src/main/java/ru/kkd/domain/model/Issue.java
+- backend/src/main/java/ru/kkd/domain/model/KeyResultSnapshot.java
+- backend/src/main/java/ru/kkd/domain/model/ModelValidation.java
+- backend/src/main/java/ru/kkd/domain/model/ObjectType.java
+- backend/src/main/java/ru/kkd/domain/model/RuleCode.java
+- backend/src/main/java/ru/kkd/domain/model/Severity.java
+- backend/src/main/java/ru/kkd/domain/rule/DataQualityChecker.java
+- backend/src/test/java/ru/kkd/domain/model/GoalSnapshotTest.java
+- backend/src/test/java/ru/kkd/domain/model/IssueTest.java
+- backend/src/test/java/ru/kkd/domain/model/KeyResultSnapshotTest.java
+- backend/src/test/java/ru/kkd/domain/rule/DataQualityCheckerTest.java
+- backend/src/test/java/ru/kkd/domain/rule/DataQualityRulesTest.java
 - README.md
-- backend/.mvn/wrapper/maven-wrapper.properties
-- backend/mvnw
-- backend/mvnw.cmd
-- backend/pom.xml
-- backend/src/main/java/ru/kkd/KkdApplication.java
-- backend/src/main/resources/application.yml
-- backend/src/test/java/ru/kkd/KkdApplicationTest.java
 - docs/plan.md
 - docs/progress.md
 - specs/design.md
 - specs/requirements.md
 
-PDF, кеши, результаты сборки и временные проверки в состав не входят. Разрешение пользователя записано до индексации. При материальном изменении состава повторно согласовать.
+Индекс перед E был пуст; индексация и коммит в E не выполнялись. Разрешение на F записано до индексации. Сборки, кеши, логи, .env и PDF не входят в состав. Материальное изменение состава повторно согласовать.
