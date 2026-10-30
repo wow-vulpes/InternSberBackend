@@ -1,0 +1,10 @@
+DROP VIEW kkd.run_statistics;
+DROP FUNCTION kkd.unit_subtree(text, text);
+DROP TRIGGER guard_issue ON kkd.kkd_issue;
+DROP TRIGGER guard_key_result_snapshot ON kkd.key_result_snapshot;
+DROP TRIGGER guard_goal_snapshot ON kkd.goal_snapshot;
+DROP TRIGGER guard_unit_snapshot ON kkd.unit_snapshot;
+DROP FUNCTION kkd.guard_run_data();
+DROP TRIGGER guard_run ON kkd.kkd_run;
+DROP FUNCTION kkd.guard_run();
+DROP FUNCTION kkd.validate_snapshot(text);
