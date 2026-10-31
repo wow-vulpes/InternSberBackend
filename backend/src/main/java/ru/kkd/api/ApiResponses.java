@@ -35,15 +35,17 @@ public final class ApiResponses {
 
     @JsonInclude(JsonInclude.Include.ALWAYS)
     public record Metric(
-            String code,
+            String key,
             String title,
-            BigDecimal current,
+            String unit,
+            BigDecimal value,
             BigDecimal previous,
             BigDecimal delta,
             String trend,
             String severity) {}
 
-    public record SeverityCounts(long critical, long major, long minor) {}
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    public record SeverityComparison(String code, long current, Long previous, Long delta) {}
 
     @JsonInclude(JsonInclude.Include.ALWAYS)
     public record Delta(
@@ -58,10 +60,11 @@ public final class ApiResponses {
             RunRef comparedTo,
             Unit unit,
             List<Metric> metrics,
-            SeverityCounts issuesBySeverity,
+            List<SeverityComparison> issuesBySeverity,
             Delta delta) {
         public Summary {
             metrics = List.copyOf(metrics);
+            issuesBySeverity = List.copyOf(issuesBySeverity);
         }
     }
 

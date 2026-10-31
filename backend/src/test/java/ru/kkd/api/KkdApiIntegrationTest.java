@@ -187,28 +187,46 @@ class KkdApiIntegrationTest {
         assertThat(result.get("metrics").size()).isEqualTo(3);
         for (JsonNode metric : result.get("metrics")) {
             assertFields(
-                    metric, "code", "title", "current", "previous", "delta", "trend", "severity");
+                    metric,
+                    "key",
+                    "title",
+                    "unit",
+                    "value",
+                    "previous",
+                    "delta",
+                    "trend",
+                    "severity");
             assertThat(metric.get("title").asText()).isNotBlank();
             assertThat(metric.get("severity").asText()).isEqualTo("critical");
         }
-        assertThat(result.get("metrics").get(0).get("code").asText())
-                .isEqualTo("clean_goals_share");
-        assertThat(result.get("metrics").get(0).get("current").decimalValue())
+        assertThat(result.get("metrics").get(0).get("key").asText()).isEqualTo("clean_goals_share");
+        assertThat(result.get("metrics").get(0).get("value").decimalValue())
                 .isEqualByComparingTo("65.2");
         assertThat(result.get("metrics").get(0).get("previous").decimalValue())
                 .isEqualByComparingTo("65.2");
         assertThat(result.get("metrics").get(0).get("trend").asText()).isEqualTo("unchanged");
+        assertThat(result.get("metrics").get(0).get("unit").asText()).isEqualTo("%");
         JsonNode affected = result.get("metrics").get(1);
-        assertThat(affected.get("code").asText()).isEqualTo("affected_goals_count");
-        assertThat(affected.get("current").asLong()).isEqualTo(8);
+        assertThat(affected.get("key").asText()).isEqualTo("affected_goals_count");
+        assertThat(affected.get("value").asLong()).isEqualTo(8);
+        assertThat(affected.get("unit").asText()).isEqualTo("шт.");
         JsonNode issues = result.get("metrics").get(2);
-        assertThat(issues.get("code").asText()).isEqualTo("issues_count");
-        assertThat(issues.get("current").asLong()).isEqualTo(8);
+        assertThat(issues.get("key").asText()).isEqualTo("issues_count");
+        assertThat(issues.get("value").asLong()).isEqualTo(8);
+        assertThat(issues.get("unit").asText()).isEqualTo("шт.");
         assertThat(issues.get("previous").asLong()).isEqualTo(10);
         assertThat(issues.get("delta").asLong()).isEqualTo(-2);
-        assertThat(issues.get("trend").asText()).isEqualTo("improved");
+        assertThat(issues.get("trend").asText()).isEqualTo("better");
         assertThat(result.get("issues_by_severity"))
-                .isEqualTo(json.readTree("{\"critical\":3,\"major\":2,\"minor\":3}"));
+                .isEqualTo(
+                        json.readTree(
+                                """
+                        [
+                          {"code":"critical","current":3,"previous":5,"delta":-2},
+                          {"code":"major","current":2,"previous":2,"delta":0},
+                          {"code":"minor","current":3,"previous":3,"delta":0}
+                        ]
+                        """));
         assertThat(result.get("delta"))
                 .isEqualTo(json.readTree("{\"new\":3,\"persisting\":5,\"resolved\":5}"));
     }
@@ -225,6 +243,13 @@ class KkdApiIntegrationTest {
                 assertThat(metric.get(field).isNull()).isTrue();
             }
         }
+        assertThat(result.get("issues_by_severity").isArray()).isTrue();
+        assertThat(result.get("issues_by_severity").size()).isEqualTo(3);
+        for (JsonNode severity : result.get("issues_by_severity")) {
+            assertFields(severity, "code", "current", "previous", "delta");
+            assertThat(severity.get("previous").isNull()).isTrue();
+            assertThat(severity.get("delta").isNull()).isTrue();
+        }
         assertFields(result.get("delta"), "new", "persisting", "resolved");
         for (JsonNode counter : result.get("delta")) {
             assertThat(counter.isNull()).isTrue();
@@ -235,9 +260,19 @@ class KkdApiIntegrationTest {
     void summaryUsesDescendantsAndKeepsUndefinedSeverityAndShareNull() throws Exception {
         demo.initialize();
         JsonNode middle = request(SUMMARY, parameters("run_id", SECOND, "unit_id", "U2"), 200);
-        assertThat(middle.get("metrics").get(0).get("current").decimalValue())
+        assertThat(middle.get("metrics").get(0).get("value").decimalValue())
                 .isEqualByComparingTo("80.0");
-        assertThat(middle.get("metrics").get(0).get("trend").asText()).isEqualTo("deteriorated");
+        assertThat(middle.get("metrics").get(0).get("trend").asText()).isEqualTo("worse");
+        assertThat(middle.get("issues_by_severity"))
+                .isEqualTo(
+                        json.readTree(
+                                """
+                        [
+                          {"code":"critical","current":1,"previous":2,"delta":-1},
+                          {"code":"major","current":0,"previous":1,"delta":-1},
+                          {"code":"minor","current":2,"previous":1,"delta":1}
+                        ]
+                        """));
         JsonNode leaf = request(SUMMARY, parameters("run_id", SECOND, "unit_id", "U3"), 200);
         for (JsonNode metric : leaf.get("metrics")) {
             assertThat(metric.has("severity")).isTrue();
@@ -246,10 +281,17 @@ class KkdApiIntegrationTest {
         jdbc.update("INSERT INTO kkd.unit(id,name) VALUES ('EMPTY','Empty')");
         var next = runs.run(LocalDate.of(2026, 10, 27));
         JsonNode empty = request(SUMMARY, parameters("run_id", next.id(), "unit_id", "EMPTY"), 200);
-        assertThat(empty.get("metrics").get(0).get("current").isNull()).isTrue();
+        assertThat(empty.get("metrics").get(0).get("value").isNull()).isTrue();
         assertThat(empty.get("metrics").get(0).get("previous").isNull()).isTrue();
-        assertThat(empty.get("metrics").get(2).get("current").asLong()).isZero();
+        assertThat(empty.get("metrics").get(2).get("value").asLong()).isZero();
         assertThat(empty.get("metrics").get(2).get("previous").asLong()).isZero();
+        for (JsonNode severity : empty.get("issues_by_severity")) {
+            assertThat(severity.get("current").asLong()).isZero();
+            assertThat(severity.get("previous").isNull()).isFalse();
+            assertThat(severity.get("previous").asLong()).isZero();
+            assertThat(severity.get("delta").isNull()).isFalse();
+            assertThat(severity.get("delta").asLong()).isZero();
+        }
         assertThat(empty.get("compared_to").get("id").asText()).isEqualTo(SECOND);
     }
 
@@ -377,6 +419,18 @@ class KkdApiIntegrationTest {
     @MethodSource("invalidRequests")
     void invalidParametersHaveOneErrorContract(
             String path, MultiValueMap<String, String> parameters) throws Exception {
+        assertError(request(path, parameters, 422), "INVALID_PARAMETER");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "/api/kkd/summary,run_id", "/api/kkd/summary,unit_id",
+        "/api/kkd/issues,run_id", "/api/kkd/issues,unit_id"
+    })
+    void nulInIdentifiersIsAValidationError(String path, String name) throws Exception {
+        demo.initialize();
+        var parameters = parameters("run_id", SECOND, "unit_id", "U1");
+        parameters.set(name, "invalid" + (char) 0 + "id");
         assertError(request(path, parameters, 422), "INVALID_PARAMETER");
     }
 

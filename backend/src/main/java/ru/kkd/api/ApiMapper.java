@@ -1,11 +1,13 @@
 package ru.kkd.api;
 
+import java.util.List;
 import java.util.Locale;
 import ru.kkd.application.QualitySummary;
 import ru.kkd.domain.model.IssueDetails;
 import ru.kkd.domain.model.IssuePage;
 import ru.kkd.domain.model.MetricCode;
 import ru.kkd.domain.model.MetricResult;
+import ru.kkd.domain.model.MetricTrend;
 import ru.kkd.domain.model.RunDetails;
 import ru.kkd.domain.model.RunResult;
 
@@ -28,6 +30,7 @@ final class ApiMapper {
     static ApiResponses.Summary summary(QualitySummary summary) {
         var quality = summary.quality();
         var counts = quality.issuesBySeverity();
+        var previousCounts = quality.previousIssuesBySeverity();
         var delta = quality.delta();
         return new ApiResponses.Summary(
                 ref(summary.run()),
@@ -35,7 +38,19 @@ final class ApiMapper {
                 new ApiResponses.Unit(
                         summary.unit().id(), summary.unit().name(), summary.unit().parentId()),
                 quality.metrics().stream().map(ApiMapper::metric).toList(),
-                new ApiResponses.SeverityCounts(counts.critical(), counts.major(), counts.minor()),
+                List.of(
+                        severityComparison(
+                                "critical",
+                                counts.critical(),
+                                previousCounts == null ? null : previousCounts.critical()),
+                        severityComparison(
+                                "major",
+                                counts.major(),
+                                previousCounts == null ? null : previousCounts.major()),
+                        severityComparison(
+                                "minor",
+                                counts.minor(),
+                                previousCounts == null ? null : previousCounts.minor())),
                 new ApiResponses.Delta(
                         delta.newCount(), delta.persistingCount(), delta.resolvedCount()));
     }
@@ -56,11 +71,29 @@ final class ApiMapper {
         return new ApiResponses.Metric(
                 lower(metric.code()),
                 title(metric.code()),
+                metric.code() == MetricCode.CLEAN_GOALS_SHARE ? "%" : "шт.",
                 metric.current(),
                 metric.previous(),
                 metric.delta(),
-                lower(metric.trend()),
+                trend(metric.trend()),
                 lower(metric.severity()));
+    }
+
+    private static ApiResponses.SeverityComparison severityComparison(
+            String code, long current, Long previous) {
+        return new ApiResponses.SeverityComparison(
+                code, current, previous, previous == null ? null : current - previous);
+    }
+
+    private static String trend(MetricTrend value) {
+        if (value == null) {
+            return null;
+        }
+        return switch (value) {
+            case IMPROVED -> "better";
+            case DETERIORATED -> "worse";
+            case UNCHANGED -> "unchanged";
+        };
     }
 
     private static String title(MetricCode code) {

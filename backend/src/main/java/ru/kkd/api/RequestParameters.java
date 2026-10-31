@@ -27,6 +27,10 @@ final class RequestParameters {
                     if (value == null || value.isBlank()) {
                         throw new InvalidRequestException("Parameter must not be blank: " + name);
                     }
+                    if (value.indexOf(0) >= 0) {
+                        throw new InvalidRequestException(
+                                "Parameter must not contain NUL: " + name);
+                    }
                     parsed.put(name, value);
                 });
         values = Map.copyOf(parsed);

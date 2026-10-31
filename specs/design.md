@@ -97,7 +97,7 @@ SQL-объекты:
 - MigrationLifecycleTest: идемпотентный накат, откат заполненной защищённой истории и повторный накат; сравнение таблиц, колонок, ограничений, индексов, функций, триггеров и VIEW. Пользователь БД kkd воспроизводит особенность search_path. Между операциями очищается только процессный FastCheckService cache, имитируя отдельные CLI-процессы.
 - KkdApplicationTest: автоматические миграции при загрузке Spring-контекста.
 
-Полный verify текущей реализации: 255 сценариев без ошибок и пропусков. Отдельно проверены Maven update → rollback → update → update и запуск JAR на уже мигрированной БД с неизменной историей. Команды — в README; протокол — в docs/progress.md.
+Полный verify текущей реализации: 259 сценариев без ошибок и пропусков. Отдельно проверены Maven update → rollback → update → update и запуск JAR на уже мигрированной БД с неизменной историей. Команды — в README; протокол — в docs/progress.md.
 
 ## Выполнение прогонов
 
@@ -168,7 +168,7 @@ SummaryRepository читает только сохранённые снимки 
 
 Trend: IMPROVED, DETERIORATED или UNCHANGED в зависимости от знака дельты и полезного направления метрики. Нулевая показанная дельта даёт UNCHANGED, даже если исходная доля изменилась в пределах округления. Если current или previous равны null, delta и trend также null. Текущие счётчики 0 не подменяют отсутствующее сравнение.
 
-По согласованному уточнению важность всех трёх метрик отражает самую серьёзную текущую проблему выбранной области: CRITICAL > MAJOR > MINOR, без проблем null. Порогов процентов/количества проблем не задано. Отдельно возвращаются точные текущие critical/major/minor, в том числе нули.
+По согласованному уточнению важность всех трёх метрик отражает самую серьёзную текущую проблему выбранной области: CRITICAL > MAJOR > MINOR, без проблем null. Порогов процентов/количества проблем не задано. Отдельно считаются точные current/previous/delta для critical/major/minor, в том числе нули; без прошлого снимка previous/delta равны null.
 
 ### Идентичность и дельта проблем
 
@@ -217,7 +217,9 @@ DTO отделены от доменных моделей: ApiResponses соде
 
 Оба параметра обязательны. Ответ 200 содержит ровно run, compared_to, unit, metrics, issues_by_severity, delta. run и compared_to — объекты {id,snapshot_date}, compared_to может быть null. unit содержит {id,name,parent_id} из текущего снимка. previousUnit остаётся внутренней информацией прикладного сервиса, отдельного поля в HTTP нет.
 
-Метрики идут в порядке clean_goals_share, affected_goals_count, issues_count. Каждый элемент: {code,title,current,previous,delta,trend,severity}. Trend — improved/deteriorated/unchanged либо null; severity — critical/major/minor либо null. issues_by_severity содержит critical/major/minor с числовыми счётчиками, включая нули. delta содержит new/persisting/resolved; у первого прогона все три поля null.
+Контракт сверен с InternBTBack.pdf, страницы 2–3. Метрики идут в порядке clean_goals_share, affected_goals_count, issues_count. Каждый элемент: {key,title,unit,value,previous,delta,trend,severity}. unit — "%" у доли и "шт." у счётчиков; value — текущее значение. Trend — better/worse/unchanged либо null. Внутренние MetricCode/MetricTrend и MetricResult.current сохраняют доменные имена; ApiMapper явно переводит их в контракт БТ. severity — дополнительное согласованное поле, critical/major/minor либо null. Дополнительное unit.parent_id также сохранено; обязательные поля фрагмента БТ не заменяются расширениями.
+
+issues_by_severity — массив трёх элементов в порядке critical, major, minor: {code,current,previous,delta}. Current берётся из текущего снимка области, previous — из прошлого снимка той же области, delta=current−previous. QualityMetricsCalculator возвращает оба SeverityCounts; ApiMapper формирует строки сравнения. У первого прогона previous/delta равны null для каждой важности, current остаётся числом. Если прошлый прогон существует, но подразделение в нём отсутствует, предыдущие счётчики равны 0. Нулевые текущие уровни не исключаются из массива. delta верхнего уровня содержит new/persisting/resolved; у первого прогона все три поля null.
 
 Пример для второго демопрогона и U1:
 
@@ -227,11 +229,15 @@ DTO отделены от доменных моделей: ApiResponses соде
   "compared_to": {"id": "demo-2026-10-19", "snapshot_date": "2026-10-19"},
   "unit": {"id": "U1", "name": "Банк", "parent_id": null},
   "metrics": [
-    {"code": "clean_goals_share", "title": "Доля корректных целей", "current": 65.2, "previous": 65.2, "delta": 0.0, "trend": "unchanged", "severity": "critical"},
-    {"code": "affected_goals_count", "title": "Цели с проблемами", "current": 8, "previous": 8, "delta": 0, "trend": "unchanged", "severity": "critical"},
-    {"code": "issues_count", "title": "Проблемы", "current": 8, "previous": 10, "delta": -2, "trend": "improved", "severity": "critical"}
+    {"key": "clean_goals_share", "title": "Доля корректных целей", "unit": "%", "value": 65.2, "previous": 65.2, "delta": 0.0, "trend": "unchanged", "severity": "critical"},
+    {"key": "affected_goals_count", "title": "Цели с проблемами", "unit": "шт.", "value": 8, "previous": 8, "delta": 0, "trend": "unchanged", "severity": "critical"},
+    {"key": "issues_count", "title": "Проблемы", "unit": "шт.", "value": 8, "previous": 10, "delta": -2, "trend": "better", "severity": "critical"}
   ],
-  "issues_by_severity": {"critical": 3, "major": 2, "minor": 3},
+  "issues_by_severity": [
+    {"code": "critical", "current": 3, "previous": 5, "delta": -2},
+    {"code": "major", "current": 2, "previous": 2, "delta": 0},
+    {"code": "minor", "current": 3, "previous": 3, "delta": 0}
+  ],
   "delta": {"new": 3, "persisting": 5, "resolved": 5}
 }
 ```
@@ -276,7 +282,7 @@ DTO отделены от доменных моделей: ApiResponses соде
 
 ### Валидация и ошибки
 
-RequestParameters получает MultiValueMap, чтобы обнаружить повторения. На каждом endpoint-е разрешены только перечисленные параметры; неизвестные, повторные и пустые значения отклоняются. ID не обрезаются и не преобразуются в UUID. Числа содержат только десятичные цифры без знака, пробелов или дробной части и должны помещаться в int. Валидация запроса предшествует обращениям к прикладным сервисам.
+RequestParameters получает MultiValueMap, чтобы обнаружить повторения. На каждом endpoint-е разрешены только перечисленные параметры; неизвестные, повторные и пустые значения отклоняются. Значения с NUL (в URL — %00) также отклоняются с 422 INVALID_PARAMETER до обращения к БД; иначе PostgreSQL отверг бы строковый параметр и запрос превратился бы в 500. ID не обрезаются и не преобразуются в UUID. Числа содержат только десятичные цифры без знака, пробелов или дробной части и должны помещаться в int. Валидация запроса предшествует обращениям к прикладным сервисам.
 
 Ошибки обработки API возвращаются в JSON с единственной оболочкой:
 

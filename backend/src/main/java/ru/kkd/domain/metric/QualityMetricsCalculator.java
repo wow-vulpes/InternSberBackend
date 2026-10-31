@@ -47,6 +47,7 @@ public final class QualityMetricsCalculator {
                                         : BigDecimal.valueOf(previous.issues().size()),
                                 severity)),
                 severityCounts,
+                previous == null ? null : countSeverity(previous),
                 issueDelta(current, previous));
     }
 

@@ -91,9 +91,23 @@ def main():
             expect([run["status"] for run in runs], ["completed"] * 2, "demo completion")
             summary = get("/api/kkd/summary", run_id=SECOND, unit_id="U1")
             expect(summary["delta"], {"new": 3, "persisting": 5, "resolved": 5}, "delta")
-            expect([metric["current"] for metric in summary["metrics"]], [65.2, 8, 8], "metrics")
+            expect([metric["value"] for metric in summary["metrics"]], [65.2, 8, 8], "metrics")
+            expect([metric["key"] for metric in summary["metrics"]],
+                   ["clean_goals_share", "affected_goals_count", "issues_count"], "metric keys")
+            expect([metric["unit"] for metric in summary["metrics"]], ["%", "шт.", "шт."], "metric units")
+            expect(summary["metrics"][2]["trend"], "better", "improving trend")
+            expect(summary["issues_by_severity"], [
+                {"code": "critical", "current": 3, "previous": 5, "delta": -2},
+                {"code": "major", "current": 2, "previous": 2, "delta": 0},
+                {"code": "minor", "current": 3, "previous": 3, "delta": 0},
+            ], "severity comparison")
+            first_summary = get("/api/kkd/summary", run_id=FIRST, unit_id="U1")
+            expect([row["previous"] for row in first_summary["issues_by_severity"]],
+                   [None, None, None], "first severity previous")
+            expect([row["delta"] for row in first_summary["issues_by_severity"]],
+                   [None, None, None], "first severity delta")
             expect(
-                get("/api/kkd/summary", run_id=FIRST, unit_id="U1")["delta"],
+                first_summary["delta"],
                 {"new": None, "persisting": None, "resolved": None}, "first run delta",
             )
             issues = get(
@@ -105,6 +119,14 @@ def main():
             expect(
                 get("/api/kkd/issues", 422, run_id=SECOND, limit=201)["error"]["code"],
                 "INVALID_PARAMETER", "validation",
+            )
+            expect(
+                get("/api/kkd/issues", 422, run_id="invalid\x00id")["error"]["code"],
+                "INVALID_PARAMETER", "NUL in run identifier",
+            )
+            expect(
+                get("/api/kkd/summary", 422, run_id=SECOND, unit_id="invalid\x00id")["error"]["code"],
+                "INVALID_PARAMETER", "NUL in unit identifier",
             )
             get("/actuator/env", 404)
             container = compose("ps", "-q", "app", capture=True).strip()
