@@ -8,10 +8,10 @@
 
 Решение JDBC вместо JPA: явные SQL-запросы для иерархии, снимков и агрегатов; ORM не нужен для небольшого проекта. Liquibase выбран для явных rollback-скриптов и проверки цикла миграций. Очереди, кеши и отдельные микросервисы не требуются.
 
-## Текущий каркас
+## Стек и конфигурация
 
 - Java 21, Spring Boot 3.5.16, Maven Wrapper с Maven 3.9.11.
-- Spring Web, Validation, JDBC, Liquibase 4.31.1, PostgreSQL JDBC 42.7.11 и Spring Boot Test; Testcontainers 1.21.4. Версии зависимостей управляются parent POM Spring Boot.
+- Spring Web, Actuator, Validation, JDBC, Liquibase 4.31.1, PostgreSQL JDBC 42.7.11 и Spring Boot Test; Testcontainers 1.21.4. Версии зависимостей управляются parent POM Spring Boot.
 - ru.kkd.KkdApplication.main(String[] args) запускает контекст и встроенный HTTP-сервер.
 - application.yml задаёт spring.application.name=kkd-service и server.port=${SERVER_PORT:8080}.
 - При запуске требуется PostgreSQL; Liquibase автоматически применяет миграции. Контроллеры предоставляют три GET endpoint-а; заглушек будущих функций нет.
@@ -310,6 +310,10 @@ Compose ожидает service_healthy БД перед запуском прил
 Spring Boot Actuator использует версию BOM. Все endpoint-ы закрыты через access.default=none, кроме health с read-only доступом и web exposure health. Discovery выключен; show-details и show-components — never. Пробы включены вне Kubernetes. Readiness-группа включает readinessState и db: до окончания ApplicationRunner трафик не принимается, после старта без БД — 503 DOWN. Liveness не включает БД. Формат ответов health — стандартный Actuator, а не прикладная оболочка error. Docker HEALTHCHECK обращается к /actuator/health/readiness; Compose --wait дожидается healthy. В Compose Hikari connection-timeout=2000 мс позволяет readiness быстро вернуть недоступность БД.
 
 CI на Ubuntu 24.04/JDK 21 выполняет Maven verify с Testcontainers, затем scripts/check_compose.py. Скрипт создаёт отдельный случайный Compose-проект, собирает образ, проверяет реальный HTTP и данные, отсутствие дублей после перезапуска, readiness/liveness при остановке и восстановлении БД. Собственные контейнеры и том удаляются в finally. Docker build пропускает исполнение тестов, поскольку verify уже проверяет их на runner; форматирование и требование JDK остаются активны. Actions закреплены SHA, workflow имеет только contents:read; отчёты и JAR хранятся 7 дней. Удалённое выполнение GitHub Actions ещё не подтверждено.
+
+## Итоговая проверка поставки
+
+Чистая копия файлов Git без локального JAR и .env проверена на Linux с новым томом PostgreSQL; были доступны сеть и Docker-кэш. Старт по README завершил миграции и демо, полный down/up сохранил историю, отдельная контейнерная команда создала новый прогон. На 2026-10-27 KR12 переходит границу 45 дней: 9 проблем, дельта 1/8/0 относительно второго демопрогона; старые снимки не изменились. Подробный протокол — [docs/progress.md](../docs/progress.md), маршрут проверки — [docs/submission.md](../docs/submission.md).
 
 ## Проверенные источники и ограничения
 
