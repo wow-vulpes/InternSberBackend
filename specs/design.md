@@ -97,7 +97,7 @@ SQL-объекты:
 - MigrationLifecycleTest: идемпотентный накат, откат заполненной защищённой истории и повторный накат; сравнение таблиц, колонок, ограничений, индексов, функций, триггеров и VIEW. Пользователь БД kkd воспроизводит особенность search_path. Между операциями очищается только процессный FastCheckService cache, имитируя отдельные CLI-процессы.
 - KkdApplicationTest: автоматические миграции при загрузке Spring-контекста.
 
-Полный verify текущей реализации: 259 сценариев без ошибок и пропусков. Отдельно проверены Maven update → rollback → update → update и запуск JAR на уже мигрированной БД с неизменной историей. Команды — в README; протокол — в docs/progress.md.
+Полный verify текущей реализации: 259 сценариев без ошибок и пропусков. Отдельно проверены Maven update → rollback → update → update и запуск JAR на уже мигрированной БД с неизменной историей. Команды — в [README](../README.md), покрытие и результаты проверки — в [requirements.md](requirements.md#покрытие-проверками).
 
 ## Выполнение прогонов
 
@@ -311,7 +311,9 @@ JUnit 5 для правил, метрик и дельты; Testcontainers с Pos
 
 Dockerfile собирает JAR Maven Wrapper-ом на Temurin JDK 21 и копирует только JAR в Temurin JRE 21. Оба базовых образа Java закреплены digest списка платформ. Сборочный контекст ограничен исходниками и Maven-конфигурацией; .env, Git и кэши исключены. Runtime: UID/GID 10001, read-only root, tmpfs /tmp, без Linux capabilities, no-new-privileges. Секрет БД передаётся при запуске, в образ не записывается.
 
-Compose ожидает service_healthy БД перед запуском приложения. Внутренние порт 8080 и JDBC db:5432 фиксированы, SERVER_PORT/DB_PORT меняют только порты localhost хоста. COMPOSE_DEMO_ENABLED по умолчанию true; KKD_RUN_ENABLED принудительно false. Локальный KKD_DEMO_ENABLED не управляет Compose. Именованный том PostgreSQL сохраняет источники и историю; повторное демо использует уже готовую пару. Изменение начальных POSTGRES_* не перенастраивает существующий том.
+Compose ожидает service_healthy БД перед запуском приложения. Внутренние порт 8080 и JDBC db:5432 фиксированы, SERVER_PORT/DB_PORT меняют только порты localhost хоста. COMPOSE_DEMO_ENABLED по умолчанию true; KKD_RUN_ENABLED принудительно false. Локальный KKD_DEMO_ENABLED не управляет Compose. Запуск docker compose up работает без .env: БД/пользователь kkd, пароль kkd_local_example, порты 8080/5432 на localhost. Это параметры локального демо. Необязательная .env и переменные окружения переопределяют значения; при локальном запуске Java по-прежнему требуется экспортировать DB_PASSWORD.
+
+Именованный том PostgreSQL сохраняет источники и историю; повторное демо использует уже готовую пару. Изменение начальных POSTGRES_* не перенастраивает существующий том.
 
 Spring Boot Actuator использует версию BOM. Все endpoint-ы закрыты через access.default=none, кроме health с read-only доступом и web exposure health. Discovery выключен; show-details и show-components — never. Пробы включены вне Kubernetes. Readiness-группа включает readinessState и db: до окончания ApplicationRunner трафик не принимается, после старта без БД — 503 DOWN. Liveness не включает БД. Формат ответов health — стандартный Actuator, а не прикладная оболочка error. Docker HEALTHCHECK обращается к /actuator/health/readiness; Compose --wait дожидается healthy. В Compose Hikari connection-timeout=2000 мс позволяет readiness быстро вернуть недоступность БД.
 
@@ -319,7 +321,7 @@ CI на Ubuntu 24.04/JDK 21 выполняет Maven verify с Testcontainers, �
 
 ## Итоговая проверка поставки
 
-Чистая копия файлов Git без локального JAR и .env проверена на Linux с новым томом PostgreSQL; были доступны сеть и Docker-кэш. Старт по README завершил миграции и демо, полный down/up сохранил историю, отдельная контейнерная команда создала новый прогон. На 2026-10-27 KR12 переходит границу 45 дней: 9 проблем, дельта 1/8/0 относительно второго демопрогона; старые снимки не изменились. Подробный протокол — [docs/progress.md](../docs/progress.md), маршрут проверки — [docs/submission.md](../docs/submission.md).
+Чистая копия файлов Git без локального JAR и .env проверена на Linux с новым томом PostgreSQL; были доступны сеть и Docker-кэш. Старт по README завершил миграции и демо, полный down/up сохранил историю, отдельная контейнерная команда создала новый прогон. На 2026-10-27 KR12 переходит границу 45 дней: 9 проблем, дельта 1/8/0 относительно второго демопрогона; старые снимки не изменились. Покрытие и границы проверки — в [requirements.md](requirements.md#результаты-проверки); команды запуска и проверки API — в [README](../README.md#rest-api).
 
 ## Проверенные источники и ограничения
 
