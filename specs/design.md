@@ -1,10 +1,10 @@
 # Дизайн решения
 
-Спецификация реализации, подготовленная и обновляемая при работе с ИИ-ассистентом. Описывает модель данных, контракты и причины ключевых решений. Реализованы доменные правила, хранение в PostgreSQL, выполнение прогонов, демонстрационные данные, метрики и сравнение прогонов. REST API пока запланирован. Требования и критерии приёмки — в [requirements.md](requirements.md).
+Спецификация реализации, подготовленная и обновляемая при работе с ИИ-ассистентом. Описывает модель данных, контракты и причины ключевых решений. Реализованы доменные правила, хранение в PostgreSQL, выполнение прогонов, демонстрационные данные, метрики и сравнение прогонов. REST API реализован. Требования и критерии приёмки — в [requirements.md](requirements.md).
 
 ## Архитектура
 
-Одно Spring Boot приложение, один Maven-модуль backend/, PostgreSQL. Frontend исключён из объёма. Пакеты ru.kkd.domain (модель и чистые расчёты), application (сценарии и транзакции), persistence (SQL). Пакет api (HTTP и валидация) запланирован. API вызывает прикладные сервисы; бизнес-правила не зависят от контроллеров и SQL.
+Одно Spring Boot приложение, один Maven-модуль backend/, PostgreSQL. Frontend исключён из объёма. Пакеты ru.kkd.domain (модель и чистые расчёты), application (сценарии и транзакции), persistence (SQL). Пакет api отвечает за HTTP, DTO, преобразование значений и валидацию параметров. API вызывает прикладные сервисы; бизнес-правила не зависят от контроллеров и SQL.
 
 Решение JDBC вместо JPA: явные SQL-запросы для иерархии, снимков и агрегатов; ORM не нужен для небольшого проекта. Liquibase выбран для явных rollback-скриптов и проверки цикла миграций. Очереди, кеши и отдельные микросервисы не требуются.
 
@@ -14,7 +14,7 @@
 - Spring Web, Validation, JDBC, Liquibase 4.31.1, PostgreSQL JDBC 42.7.11 и Spring Boot Test; Testcontainers 1.21.4. Версии зависимостей управляются parent POM Spring Boot.
 - ru.kkd.KkdApplication.main(String[] args) запускает контекст и встроенный HTTP-сервер.
 - application.yml задаёт spring.application.name=kkd-service и server.port=${SERVER_PORT:8080}.
-- При запуске требуется PostgreSQL; Liquibase автоматически применяет миграции. Бизнес-контроллеров и заглушек будущих функций нет.
+- При запуске требуется PostgreSQL; Liquibase автоматически применяет миграции. Контроллеры предоставляют три GET endpoint-а; заглушек будущих функций нет.
 - .env.example — пример переменных, а не автоматически загружаемый Spring Boot файл.
 - KkdApplicationTest.contextLoads загружает Spring-контекст без HTTP-сервера с временной PostgreSQL; проверяет автоматический накат и четыре записи справочника.
 - Maven Enforcer 3.6.2 на фазе validate разрешает только JDK 21 (диапазон [21,22)) с подсказкой настроить JAVA_HOME.
@@ -40,7 +40,7 @@
 
 DataQualityChecker.check проверяет наличие списка целей, даты снимка, элементов и уникальность ID целей и КР во всём наборе, включая неактивные цели. Для каждого типа используется отдельное множество ID, поэтому ID цели и КР могут совпадать. Список вызывающего кода не изменяется. Дубли КР внутри одной цели также отклоняются на уровне check.
 
-После успешной валидации check выполняет четыре правила для активных целей. Каждое правило выделено в отдельный private-метод; в компоненте нет изменяемого состояния между вызовами. Результат сортируется и копируется через List.copyOf. Чистый компонент зарегистрирован как Spring bean через RunConfiguration и вызывается прикладным сервисом. HTTP API пока нет.
+После успешной валидации check выполняет четыре правила для активных целей. Каждое правило выделено в отдельный private-метод; в компоненте нет изменяемого состояния между вызовами. Результат сортируется и копируется через List.copyOf. Чистый компонент зарегистрирован как Spring bean через RunConfiguration и вызывается прикладным сервисом. Результаты доступны через REST API.
 
 ### Реализованное поведение
 
@@ -97,7 +97,7 @@ SQL-объекты:
 - MigrationLifecycleTest: идемпотентный накат, откат заполненной защищённой истории и повторный накат; сравнение таблиц, колонок, ограничений, индексов, функций, триггеров и VIEW. Пользователь БД kkd воспроизводит особенность search_path. Между операциями очищается только процессный FastCheckService cache, имитируя отдельные CLI-процессы.
 - KkdApplicationTest: автоматические миграции при загрузке Spring-контекста.
 
-Полный verify текущей реализации: 183 сценария без ошибок и пропусков. Отдельно проверены Maven update → rollback → update → update и запуск JAR на уже мигрированной БД с неизменной историей. Команды — в README; протокол — в docs/progress.md.
+Полный verify текущей реализации: 253 сценария без ошибок и пропусков. Отдельно проверены Maven update → rollback → update → update и запуск JAR на уже мигрированной БД с неизменной историей. Команды — в README; протокол — в docs/progress.md.
 
 ## Выполнение прогонов
 
@@ -146,9 +146,9 @@ RUNNING существует внутри открытой транзакции;
 
 ## Метрики и сравнение прогонов
 
-`SummaryService.summary(String runId, String unitId)` возвращает `QualitySummary`: run, comparedTo, unit, previousUnit и quality (метрики, текущие счётчики важности и дельта проблем). Это прикладной результат; HTTP DTO и сериализация определяются при реализации API. RunResult содержит общие сведения о прогоне и глобальное число проблем, а метрики в quality относятся только к выбранному подразделению с потомками.
+`SummaryService.summary(String runId, String unitId)` возвращает `QualitySummary`: run, comparedTo, unit, previousUnit и quality (метрики, текущие счётчики важности и дельта проблем). Это прикладной результат; HTTP DTO и сериализация описаны в разделе REST API. RunResult содержит общие сведения о прогоне и глобальное число проблем, а метрики в quality относятся только к выбранному подразделению с потомками.
 
-Сервис проверяет обязательность ID, существование прогона и его статус COMPLETED, затем подразделение в текущем снимке. Пустые/null ID отклоняются через IllegalArgumentException; неизвестный ресурс — ResourceNotFoundException; RUNNING/FAILED — RunNotCompletedException. HTTP-коды и оболочка ошибок будут подключены на шаге API.
+Сервис проверяет обязательность ID, существование прогона и его статус COMPLETED, затем подразделение в текущем снимке. Пустые/null ID отклоняются через IllegalArgumentException; неизвестный ресурс — ResourceNotFoundException; RUNNING/FAILED — RunNotCompletedException. HTTP-коды и оболочка ошибок подключены в ApiExceptionHandler.
 
 SummaryRepository читает только сохранённые снимки и проблемы. Состав выбранного подразделения определяет `kkd.unit_subtree(runId,unitId)`; цели фильтруются по ACTIVE, проблемы связываются с ними через goal_snapshot. Текущие источники, системная дата и повторный запуск правил в чтении не участвуют. Важность берётся из сохранённого kkd_issue.severity, а не пересчитывается по текущему справочнику. Завершённые снимки неизменяемы, поэтому последовательные SELECT не требуют блокировки источников.
 
@@ -186,22 +186,125 @@ Trend: IMPROVED, DETERIORATED или UNCHANGED в зависимости от з
 | U2 вместе с U3 | 80.0 / 86.7 | 3 / 2 | 3 / 4 | 1 / 2 / 2 |
 | U3 | 100.0 / 100.0 | 0 / 0 | 0 / 0 | 0 / 0 / 0 |
 
-Текущая важность U1 и U2 — CRITICAL; U3 — null. Для U1 счётчики важности 3/2/3. Наличие реализации расчёта не означает доступность HTTP-маршрутов; они относятся к следующему шагу.
+Текущая важность U1 и U2 — CRITICAL; U3 — null. Для U1 счётчики важности 3/2/3. Эти значения возвращаются через GET /api/kkd/summary.
 
-## Планируемый API
+## REST API
 
-- GET /api/runs: ID, статус, дата снимка, ссылка на сравниваемый прогон, число проблем.
-- GET /api/kkd/summary?run_id=&unit_id=: run, compared_to, unit, metrics, issues_by_severity, delta по БТ.
-- GET /api/kkd/issues: run_id, фильтры unit_id/rule/severity, пагинация limit/offset/total; точные имена и обязательность параметров согласовать на шаге 6.
-- Неизвестные прогон/подразделение — 404; некорректные параметры — 422; единая оболочка error с code/message.
+Все endpoint-ы читают данные. Запись источников и запуск прогонов через HTTP не предусмотрены; для прогонов используется отдельная команда. Авторизация и корпоративная интеграция не заданы. Контроллер не содержит SQL и расчётов: KkdController → прикладные сервисы → репозитории/чистый калькулятор.
 
-Полные DTO, ошибки, сортировка, ограничения и примеры будут описаны до реализации API. Бизнес-API пока недоступен. Прогоны запускаются отдельной командой; публичный POST не предусмотрен текущим контрактом.
+RunQueryService предоставляет список прогонов и общую проверку существования/COMPLETED для SummaryService и IssueService. RunRepository добавляет проекцию RunDetails с временем начала/окончания; IssueRepository строит страницу и total с одинаковыми фильтрами. Пользовательские значения передаются параметрами SQL; динамические части запросов состоят только из фиксированных фрагментов.
+
+DTO отделены от доменных моделей: ApiResponses содержит публичные формы ответов, ApiMapper преобразует даты, enum и поля. Имена полей — snake_case. Значения null не опускаются; числа остаются JSON numbers, а не строками. Даты — ISO YYYY-MM-DD, время — ISO 8601 с часовым смещением. Правила имеют верхний регистр, остальные перечисления — нижний. Текст message предназначен человеку; клиенту следует обрабатывать error.code.
+
+### GET /api/runs
+
+Параметров нет. Ответ 200 — JSON-массив всех прогонов, включая RUNNING и FAILED; пустой список — []. Порядок started_at DESC, id DESC. Поля элемента:
+
+| Поле | Тип/смысл |
+| --- | --- |
+| id | Строковый ID прогона |
+| snapshot_date | Дата снимка |
+| status | running / completed / failed |
+| compared_to_id | ID прошлого прогона либо null |
+| started_at | Время начала |
+| finished_at | Время окончания либо null |
+| issues_count | Глобальное число проблем для COMPLETED, иначе null |
+| error_code | Сохранённый код сбоя для FAILED, иначе null |
+
+Пагинация списка прогонов не предусмотрена текущим контрактом; limit/offset относятся только к проблемам.
+
+### GET /api/kkd/summary?run_id=...&unit_id=...
+
+Оба параметра обязательны. Ответ 200 содержит ровно run, compared_to, unit, metrics, issues_by_severity, delta. run и compared_to — объекты {id,snapshot_date}, compared_to может быть null. unit содержит {id,name,parent_id} из текущего снимка. previousUnit остаётся внутренней информацией прикладного сервиса, отдельного поля в HTTP нет.
+
+Метрики идут в порядке clean_goals_share, affected_goals_count, issues_count. Каждый элемент: {code,title,current,previous,delta,trend,severity}. Trend — improved/deteriorated/unchanged либо null; severity — critical/major/minor либо null. issues_by_severity содержит critical/major/minor с числовыми счётчиками, включая нули. delta содержит new/persisting/resolved; у первого прогона все три поля null.
+
+Пример для второго демопрогона и U1:
+
+```json
+{
+  "run": {"id": "demo-2026-10-26", "snapshot_date": "2026-10-26"},
+  "compared_to": {"id": "demo-2026-10-19", "snapshot_date": "2026-10-19"},
+  "unit": {"id": "U1", "name": "Банк", "parent_id": null},
+  "metrics": [
+    {"code": "clean_goals_share", "title": "Доля корректных целей", "current": 65.2, "previous": 65.2, "delta": 0.0, "trend": "unchanged", "severity": "critical"},
+    {"code": "affected_goals_count", "title": "Цели с проблемами", "current": 8, "previous": 8, "delta": 0, "trend": "unchanged", "severity": "critical"},
+    {"code": "issues_count", "title": "Проблемы", "current": 8, "previous": 10, "delta": -2, "trend": "improved", "severity": "critical"}
+  ],
+  "issues_by_severity": {"critical": 3, "major": 2, "minor": 3},
+  "delta": {"new": 3, "persisting": 5, "resolved": 5}
+}
+```
+
+### GET /api/kkd/issues
+
+| Параметр | Обязательность и ограничения |
+| --- | --- |
+| run_id | Обязателен, существующий COMPLETED |
+| unit_id | Необязателен; подразделение и все потомки в снимке прогона |
+| rule | Необязателен; точный код одного из четырёх правил |
+| severity | Необязателен; critical/major/minor, регистронезависимо |
+| limit | По умолчанию 50; целое 1–200 |
+| offset | По умолчанию 0; целое 0–2147483647 |
+
+Фильтры объединяются через AND. Ответ 200: {items,total,limit,offset}. total — число всех совпадений до пагинации; offset за концом возвращает пустой items с прежним total. Проблемы активных целей упорядочены по goal_id, rule_code, object_type, object_id по возрастанию; идентичность проблемы делает порядок однозначным.
+
+Элемент items содержит run_id, rule_code, rule_title, severity, object_type, object_id, object_title, goal_id, goal_title, unit_id, unit_name. Тип объекта — goal либо key_result. Названия объекта, цели и подразделения берутся из снимков, важность — из сохранённой проблемы. Название правила — справочная подпись kkd_rule; подписи справочника отдельно не версионируются. Текущие таблицы источника не участвуют в запросе.
+
+Пример первой страницы с ограничением 1:
+
+```json
+{
+  "items": [{
+    "run_id": "demo-2026-10-26",
+    "rule_code": "KR_WEIGHTS_SUM",
+    "rule_title": "Сумма весов КР не равна 100%",
+    "severity": "major",
+    "object_type": "goal",
+    "object_id": "G03",
+    "object_title": "Демонстрационная цель 03",
+    "goal_id": "G03",
+    "goal_title": "Демонстрационная цель 03",
+    "unit_id": "U1",
+    "unit_name": "Банк"
+  }],
+  "total": 8,
+  "limit": 1,
+  "offset": 0
+}
+```
+
+### Валидация и ошибки
+
+RequestParameters получает MultiValueMap, чтобы обнаружить повторения. На каждом endpoint-е разрешены только перечисленные параметры; неизвестные, повторные и пустые значения отклоняются. ID не обрезаются и не преобразуются в UUID. Числа содержат только десятичные цифры без знака, пробелов или дробной части и должны помещаться в int. Валидация запроса предшествует обращениям к прикладным сервисам.
+
+Ошибки обработки API возвращаются в JSON с единственной оболочкой:
+
+```json
+{"error":{"code":"INVALID_PARAMETER","message":"limit must be between 1 and 200"}}
+```
+
+| HTTP | code | Условие |
+| --- | --- | --- |
+| 404 | RUN_NOT_FOUND | Нет прогона |
+| 404 | UNIT_NOT_FOUND | Нет подразделения в текущем снимке |
+| 404 | NOT_FOUND | Нет маршрута |
+| 422 | INVALID_PARAMETER | Ошибка параметров |
+| 422 | RUN_NOT_COMPLETED | Запрошена сводка/проблемы RUNNING или FAILED |
+| 405 | METHOD_NOT_ALLOWED | Метод не поддерживается; сохраняется Allow |
+| 406 | NOT_ACCEPTABLE | Accept не допускает JSON |
+| 500 | INTERNAL_ERROR | Непредвиденная ошибка; message=Internal server error |
+
+ApiExceptionHandler расширяет ResponseEntityExceptionHandler для единой формы framework-ошибок и прикладных исключений. В ответ 500 не попадают SQL, пароли, имена исключений или трассировки; в журнал записывается только класс неожиданной ошибки. Ошибка серверной логики IllegalArgumentException не маскируется под неверный пользовательский параметр: в 422 преобразуются только ошибки разбора контролируемых входных значений.
 
 ## Проверки и запуск
 
-JUnit 5 для правил, метрик и дельты; Testcontainers с PostgreSQL для SQL и миграций; проверки HTTP-контрактов при реализации API. RunServiceIntegrationTest проверяет прогон целиком на PostgreSQL: 17 сценариев для демо, снимков, отката, блокировок и точности numeric. StartupCommandsTest содержит 7 сценариев выбора режима, дат и ошибок. QualityMetricsCalculatorTest содержит 23 сценария формул, округления, null, трендов, важности, идентичности и неизменяемости. SummaryServiceIntegrationTest содержит 17 сценариев метрик и сравнений на PostgreSQL, включая изменения иерархии, состава целей, исчезновение/появление подразделений и ошибки поиска/состояния. В конечном решении docker compose up запускает PostgreSQL и приложение, включая миграции и демоданные. Сейчас Compose поднимает только PostgreSQL; сервис приложения будет добавлен позже; демо уже запускается отдельным флагом приложения.
+JUnit 5 для правил, метрик и дельты; Testcontainers с PostgreSQL для SQL и миграций; проверки HTTP-контрактов через MockMvc и PostgreSQL. RunServiceIntegrationTest проверяет прогон целиком на PostgreSQL: 17 сценариев для демо, снимков, отката, блокировок и точности numeric. StartupCommandsTest содержит 7 сценариев выбора режима, дат и ошибок. QualityMetricsCalculatorTest содержит 23 сценария формул, округления, null, трендов, важности, идентичности и неизменяемости. SummaryServiceIntegrationTest содержит 17 сценариев метрик и сравнений на PostgreSQL, включая изменения иерархии, состава целей, исчезновение/появление подразделений и ошибки поиска/состояния. В конечном решении docker compose up запускает PostgreSQL и приложение, включая миграции и демоданные. Сейчас Compose поднимает только PostgreSQL; сервис приложения будет добавлен позже; демо уже запускается отдельным флагом приложения.
 
 ## Проверенные источники и ограничения
+
+- [Параметры запросов Spring MVC 6.2](https://docs.spring.io/spring-framework/reference/6.2/web/webmvc/mvc-controller/ann-methods/requestparam.html).
+- [ResponseEntityExceptionHandler 6.2](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/web/servlet/mvc/method/annotation/ResponseEntityExceptionHandler.html).
 
 - [Программные транзакции Spring Framework 6.2](https://docs.spring.io/spring-framework/reference/6.2/data-access/transaction/programmatic.html).
 - [Блокировки PostgreSQL 17](https://www.postgresql.org/docs/17/explicit-locking.html): табличные и транзакционные advisory-блокировки.

@@ -1,6 +1,7 @@
 package ru.kkd.persistence;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -12,6 +13,7 @@ import ru.kkd.domain.model.GoalSnapshot;
 import ru.kkd.domain.model.Issue;
 import ru.kkd.domain.model.KeyResultSnapshot;
 import ru.kkd.domain.model.ObjectType;
+import ru.kkd.domain.model.RunDetails;
 import ru.kkd.domain.model.RunResult;
 import ru.kkd.domain.model.RunStatus;
 
@@ -154,5 +156,24 @@ public class RunRepository {
                         runId)
                 .stream()
                 .findFirst();
+    }
+
+    public List<RunDetails> listRuns() {
+        return jdbc.query(
+                """
+                SELECT r.id,r.snapshot_date,r.status,r.compared_to_id,r.started_at,r.finished_at,r.error_code,s.issues_count
+                FROM kkd.kkd_run r JOIN kkd.run_statistics s ON s.run_id=r.id
+                ORDER BY r.started_at DESC,r.id DESC
+                """,
+                (rs, row) ->
+                        new RunDetails(
+                                rs.getString("id"),
+                                rs.getObject("snapshot_date", LocalDate.class),
+                                RunStatus.valueOf(rs.getString("status")),
+                                rs.getString("compared_to_id"),
+                                rs.getObject("started_at", OffsetDateTime.class),
+                                rs.getObject("finished_at", OffsetDateTime.class),
+                                rs.getObject("issues_count", Long.class),
+                                rs.getString("error_code")));
     }
 }
