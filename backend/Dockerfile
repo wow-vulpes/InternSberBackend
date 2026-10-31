@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 FROM eclipse-temurin:21-jre-jammy@sha256:1eac8b8fee11ca7d6725a48bc5d41992ed1561504ebae25490d2d062847e8269
 WORKDIR /app
-COPY --from=build /build/backend/target/kkd-service-0.0.1-SNAPSHOT.jar ./app.jar
+COPY --from=build /build/backend/target/*.jar ./app.jar
 USER 10001:10001
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=12 \

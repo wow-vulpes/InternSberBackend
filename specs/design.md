@@ -11,7 +11,7 @@
 ## Стек и конфигурация
 
 - Java 21, Spring Boot 3.5.16, Maven Wrapper с Maven 3.9.11.
-- Spring Web, Actuator, Validation, JDBC, Liquibase 4.31.1, PostgreSQL JDBC 42.7.11 и Spring Boot Test; Testcontainers 1.21.4. Версии зависимостей управляются parent POM Spring Boot.
+- Spring Web, Actuator, JDBC, Liquibase 4.31.1, PostgreSQL JDBC 42.7.11 и Spring Boot Test; Testcontainers 1.21.4. Версии зависимостей управляются parent POM Spring Boot.
 - ru.kkd.KkdApplication.main(String[] args) запускает контекст и встроенный HTTP-сервер.
 - application.yml задаёт spring.application.name=kkd-service и server.port=${SERVER_PORT:8080}.
 - При запуске требуется PostgreSQL; Liquibase автоматически применяет миграции. Контроллеры предоставляют три GET endpoint-а; заглушек будущих функций нет.
@@ -309,15 +309,17 @@ JUnit 5 для правил, метрик и дельты; Testcontainers с Pos
 
 ## Контейнерный запуск и готовность
 
-Dockerfile собирает JAR Maven Wrapper-ом на Temurin JDK 21 и копирует только JAR в Temurin JRE 21. Оба базовых образа Java закреплены digest списка платформ. Сборочный контекст ограничен исходниками и Maven-конфигурацией; .env, Git и кэши исключены. Runtime: UID/GID 10001, read-only root, tmpfs /tmp, без Linux capabilities, no-new-privileges. Секрет БД передаётся при запуске, в образ не записывается.
+Dockerfile собирает JAR Maven Wrapper-ом на Temurin JDK 21 и копирует только JAR в Temurin JRE 21. Имя артефакта выбирается по *.jar, поэтому изменение версии Maven-модуля не требует переименовывать файл в Dockerfile. Проверка входных параметров реализована явно в RequestParameters; дополнительная зависимость Bean Validation для неё не требуется. Оба базовых образа Java закреплены digest списка платформ. Сборочный контекст ограничен исходниками и Maven-конфигурацией; .env, Git и кэши исключены. Runtime: UID/GID 10001, read-only root, tmpfs /tmp, без Linux capabilities, no-new-privileges. Секрет БД передаётся при запуске, в образ не записывается.
 
 Compose ожидает service_healthy БД перед запуском приложения. Внутренние порт 8080 и JDBC db:5432 фиксированы, SERVER_PORT/DB_PORT меняют только порты localhost хоста. COMPOSE_DEMO_ENABLED по умолчанию true; KKD_RUN_ENABLED принудительно false. Локальный KKD_DEMO_ENABLED не управляет Compose. Запуск docker compose up работает без .env: БД/пользователь kkd, пароль kkd_local_example, порты 8080/5432 на localhost. Это параметры локального демо. Необязательная .env и переменные окружения переопределяют значения; при локальном запуске Java по-прежнему требуется экспортировать DB_PASSWORD.
+
+Локальный Compose использует одну учётную запись для миграций и приложения. Для корпоративного внедрения следует согласовать отдельные роли миграций и runtime с минимальными правами, хранение секретов и авторизацию; локальные настройки демо не являются конфигурацией ИФТ.
 
 Именованный том PostgreSQL сохраняет источники и историю; повторное демо использует уже готовую пару. Изменение начальных POSTGRES_* не перенастраивает существующий том.
 
 Spring Boot Actuator использует версию BOM. Все endpoint-ы закрыты через access.default=none, кроме health с read-only доступом и web exposure health. Discovery выключен; show-details и show-components — never. Пробы включены вне Kubernetes. Readiness-группа включает readinessState и db: до окончания ApplicationRunner трафик не принимается, после старта без БД — 503 DOWN. Liveness не включает БД. Формат ответов health — стандартный Actuator, а не прикладная оболочка error. Docker HEALTHCHECK обращается к /actuator/health/readiness; Compose --wait дожидается healthy. В Compose Hikari connection-timeout=2000 мс позволяет readiness быстро вернуть недоступность БД.
 
-CI на Ubuntu 24.04/JDK 21 выполняет Maven verify с Testcontainers, затем scripts/check_compose.py. Скрипт создаёт отдельный случайный Compose-проект, собирает образ, проверяет реальный HTTP и данные, отсутствие дублей после перезапуска, readiness/liveness при остановке и восстановлении БД. Собственные контейнеры и том удаляются в finally. Docker build пропускает исполнение тестов, поскольку verify уже проверяет их на runner; форматирование и требование JDK остаются активны. Actions закреплены SHA, workflow имеет только contents:read; отчёты и JAR хранятся 7 дней. Удалённое выполнение подтверждено для 5afaace: [успешный запуск GitHub Actions](https://github.com/wow-vulpes/InternSberBackend/actions/runs/41178861616) (31 октября 2026), включая verify, контейнерную проверку и загрузку артефактов.
+CI на Ubuntu 24.04/JDK 21 выполняет Maven verify с Testcontainers, затем scripts/check_compose.py. Скрипт создаёт отдельный случайный Compose-проект, собирает образ, проверяет реальный HTTP и данные, отсутствие дублей после перезапуска, readiness/liveness при остановке и восстановлении БД. Собственные контейнеры и том удаляются в finally. Docker build пропускает исполнение тестов, поскольку verify уже проверяет их на runner; форматирование и требование JDK остаются активны. Actions закреплены SHA, workflow имеет только contents:read; отчёты и JAR хранятся 7 дней. Удалённое выполнение подтверждено для 9c831e1: [успешный запуск GitHub Actions](https://github.com/wow-vulpes/InternSberBackend/actions/runs/41183777860) (31 октября 2026), включая verify, контейнерную проверку и загрузку артефактов.
 
 ## Итоговая проверка поставки
 
