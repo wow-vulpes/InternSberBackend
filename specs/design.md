@@ -97,7 +97,7 @@ SQL-объекты:
 - MigrationLifecycleTest: идемпотентный накат, откат заполненной защищённой истории и повторный накат; сравнение таблиц, колонок, ограничений, индексов, функций, триггеров и VIEW. Пользователь БД kkd воспроизводит особенность search_path. Между операциями очищается только процессный FastCheckService cache, имитируя отдельные CLI-процессы.
 - KkdApplicationTest: автоматические миграции при загрузке Spring-контекста.
 
-Полный verify текущей реализации: 253 сценария без ошибок и пропусков. Отдельно проверены Maven update → rollback → update → update и запуск JAR на уже мигрированной БД с неизменной историей. Команды — в README; протокол — в docs/progress.md.
+Полный verify текущей реализации: 255 сценариев без ошибок и пропусков. Отдельно проверены Maven update → rollback → update → update и запуск JAR на уже мигрированной БД с неизменной историей. Команды — в README; протокол — в docs/progress.md.
 
 ## Выполнение прогонов
 
@@ -299,9 +299,22 @@ ApiExceptionHandler расширяет ResponseEntityExceptionHandler для е�
 
 ## Проверки и запуск
 
-JUnit 5 для правил, метрик и дельты; Testcontainers с PostgreSQL для SQL и миграций; проверки HTTP-контрактов через MockMvc и PostgreSQL. RunServiceIntegrationTest проверяет прогон целиком на PostgreSQL: 17 сценариев для демо, снимков, отката, блокировок и точности numeric. StartupCommandsTest содержит 7 сценариев выбора режима, дат и ошибок. QualityMetricsCalculatorTest содержит 23 сценария формул, округления, null, трендов, важности, идентичности и неизменяемости. SummaryServiceIntegrationTest содержит 17 сценариев метрик и сравнений на PostgreSQL, включая изменения иерархии, состава целей, исчезновение/появление подразделений и ошибки поиска/состояния. В конечном решении docker compose up запускает PostgreSQL и приложение, включая миграции и демоданные. Сейчас Compose поднимает только PostgreSQL; сервис приложения будет добавлен позже; демо уже запускается отдельным флагом приложения.
+JUnit 5 для правил, метрик и дельты; Testcontainers с PostgreSQL для SQL и миграций; проверки HTTP-контрактов через MockMvc и PostgreSQL. RunServiceIntegrationTest проверяет прогон целиком на PostgreSQL: 17 сценариев для демо, снимков, отката, блокировок и точности numeric. StartupCommandsTest содержит 7 сценариев выбора режима, дат и ошибок. QualityMetricsCalculatorTest содержит 23 сценария формул, округления, null, трендов, важности, идентичности и неизменяемости. SummaryServiceIntegrationTest содержит 17 сценариев метрик и сравнений на PostgreSQL, включая изменения иерархии, состава целей, исчезновение/появление подразделений и ошибки поиска/состояния. Compose запускает PostgreSQL и приложение, включая миграции и демоданные. Полная контейнерная проверка описана ниже; локальный Java-старт сохраняет выключенные по умолчанию режимы демо и прогона.
+
+## Контейнерный запуск и готовность
+
+Dockerfile собирает JAR Maven Wrapper-ом на Temurin JDK 21 и копирует только JAR в Temurin JRE 21. Оба базовых образа Java закреплены digest списка платформ. Сборочный контекст ограничен исходниками и Maven-конфигурацией; .env, Git и кэши исключены. Runtime: UID/GID 10001, read-only root, tmpfs /tmp, без Linux capabilities, no-new-privileges. Секрет БД передаётся при запуске, в образ не записывается.
+
+Compose ожидает service_healthy БД перед запуском приложения. Внутренние порт 8080 и JDBC db:5432 фиксированы, SERVER_PORT/DB_PORT меняют только порты localhost хоста. COMPOSE_DEMO_ENABLED по умолчанию true; KKD_RUN_ENABLED принудительно false. Локальный KKD_DEMO_ENABLED не управляет Compose. Именованный том PostgreSQL сохраняет источники и историю; повторное демо использует уже готовую пару. Изменение начальных POSTGRES_* не перенастраивает существующий том.
+
+Spring Boot Actuator использует версию BOM. Все endpoint-ы закрыты через access.default=none, кроме health с read-only доступом и web exposure health. Discovery выключен; show-details и show-components — never. Пробы включены вне Kubernetes. Readiness-группа включает readinessState и db: до окончания ApplicationRunner трафик не принимается, после старта без БД — 503 DOWN. Liveness не включает БД. Формат ответов health — стандартный Actuator, а не прикладная оболочка error. Docker HEALTHCHECK обращается к /actuator/health/readiness; Compose --wait дожидается healthy. В Compose Hikari connection-timeout=2000 мс позволяет readiness быстро вернуть недоступность БД.
+
+CI на Ubuntu 24.04/JDK 21 выполняет Maven verify с Testcontainers, затем scripts/check_compose.py. Скрипт создаёт отдельный случайный Compose-проект, собирает образ, проверяет реальный HTTP и данные, отсутствие дублей после перезапуска, readiness/liveness при остановке и восстановлении БД. Собственные контейнеры и том удаляются в finally. Docker build пропускает исполнение тестов, поскольку verify уже проверяет их на runner; форматирование и требование JDK остаются активны. Actions закреплены SHA, workflow имеет только contents:read; отчёты и JAR хранятся 7 дней. Удалённое выполнение GitHub Actions ещё не подтверждено.
 
 ## Проверенные источники и ограничения
+
+- [Actuator и пробы Spring Boot 3.5](https://docs.spring.io/spring-boot/3.5/reference/actuator/endpoints.html).
+- [Порядок запуска Docker Compose](https://docs.docker.com/compose/how-tos/startup-order/).
 
 - [Параметры запросов Spring MVC 6.2](https://docs.spring.io/spring-framework/reference/6.2/web/webmvc/mvc-controller/ann-methods/requestparam.html).
 - [ResponseEntityExceptionHandler 6.2](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/web/servlet/mvc/method/annotation/ResponseEntityExceptionHandler.html).
@@ -315,4 +328,4 @@ JUnit 5 для правил, метрик и дельты; Testcontainers с Pos
 - [Maven Wrapper](https://maven.apache.org/tools/wrapper/) и [Maven 3.9.11](https://maven.apache.org/docs/3.9.11/release-notes.html).
 - [Правило версии Java в Maven Enforcer](https://maven.apache.org/enforcer/enforcer-rules/requireJavaVersion.html) и [конфигурация Spotless 3.0.0](https://github.com/diffplug/spotless/blob/maven/3.0.0/plugin-maven/README.md).
 
-Проверка источников: 30 октября 2026. Срок текущей поддержки Boot 3.5 отдельно не подтверждён. Доступность артефактов проверяется реальной сборкой. Соответствие ИФТ и корпоративным требованиям непроверяемо без внешних материалов и доступа.
+Проверка источников: 31 октября 2026. Срок текущей поддержки Boot 3.5 отдельно не подтверждён. Доступность артефактов проверяется реальной сборкой. Соответствие ИФТ и корпоративным требованиям непроверяемо без внешних материалов и доступа.

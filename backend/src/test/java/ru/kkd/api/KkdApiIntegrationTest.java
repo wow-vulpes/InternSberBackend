@@ -24,8 +24,11 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.availability.AvailabilityChangeEvent;
+import org.springframework.boot.availability.ReadinessState;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -68,6 +71,41 @@ class KkdApiIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired DemoDataInitializer demo;
     @Autowired RunService runs;
+    @Autowired ApplicationContext context;
+
+    @Test
+    void onlyHealthIsExposedWithoutDatabaseDetails() throws Exception {
+        for (String path :
+                List.of(
+                        "/actuator/health",
+                        "/actuator/health/readiness",
+                        "/actuator/health/liveness")) {
+            JsonNode health = request(path, parameters(), 200);
+            assertThat(health.get("status").asText()).isEqualTo("UP");
+            assertThat(health.has("components")).isFalse();
+            assertThat(health.has("details")).isFalse();
+        }
+        for (String path :
+                List.of("/actuator", "/actuator/env", "/actuator/beans", "/actuator/metrics")) {
+            mvc.perform(get(path)).andExpect(status().isNotFound());
+        }
+    }
+
+    @Test
+    void readinessRefusesTrafficIndependentlyOfLiveness() throws Exception {
+        try {
+            AvailabilityChangeEvent.publish(context, ReadinessState.REFUSING_TRAFFIC);
+            JsonNode readiness = request("/actuator/health/readiness", parameters(), 503);
+            assertThat(readiness.get("status").asText()).isEqualTo("OUT_OF_SERVICE");
+            assertThat(
+                            request("/actuator/health/liveness", parameters(), 200)
+                                    .get("status")
+                                    .asText())
+                    .isEqualTo("UP");
+        } finally {
+            AvailabilityChangeEvent.publish(context, ReadinessState.ACCEPTING_TRAFFIC);
+        }
+    }
 
     @BeforeEach
     void clearDatabase() {

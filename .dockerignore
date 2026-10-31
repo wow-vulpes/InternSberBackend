@@ -1,0 +1,9 @@
+**
+!backend/
+!backend/pom.xml
+!backend/mvnw
+!backend/.mvn/
+!backend/.mvn/wrapper/
+!backend/.mvn/wrapper/maven-wrapper.properties
+!backend/src/
+!backend/src/**
